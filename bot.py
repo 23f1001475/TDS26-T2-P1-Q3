@@ -151,7 +151,7 @@ def main():
         print("TELEGRAM_BOT_TOKEN environment variable required.")
         return
 
-        app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     handler = MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message)
     app.add_handler(handler)
 
