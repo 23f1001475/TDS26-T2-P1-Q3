@@ -6,8 +6,12 @@ from datetime import datetime
 
 import requests
 import openai
-from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+try:
+    from telegram import Update
+    from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+except ModuleNotFoundError as e:
+    print("Required package 'python-telegram-bot' is not installed.\nInstall dependencies with: python -m pip install -r P1/Q5/requirements.txt")
+    raise
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
