@@ -13,18 +13,22 @@ from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filte
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-LOG_PUBLIC_URL = os.getenv("LOG_PUBLIC_URL", "https://example.com/run.jsonl")
+LOG_PUBLIC_URL = os.getenv("LOG_PUBLIC_URL", "none")
 LOCAL_LOG_PATH = os.getenv("LOCAL_LOG_PATH", "run.jsonl")
 
-if not TELEGRAM_TOKEN:
+if not TELEGRAM_BOT_TOKEN:
     logger.error("TELEGRAM_BOT_TOKEN not set. Exiting.")
 
 if not OPENAI_API_KEY:
     logger.warning("OPENAI_API_KEY not set. OpenAI calls will fail if attempted.")
 
-openai.api_key = OPENAI_API_KEY
+# Configure OpenAI key only if provided
+if OPENAI_API_KEY:
+    openai.api_key = OPENAI_API_KEY
+else:
+    openai.api_key = None
 
 PROMPT_INSTRUCTIONS = (
     "You are a careful data-analyst agent. The user will send a plain-text message asking a data-analysis question. "
@@ -143,11 +147,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-    if not TELEGRAM_TOKEN:
+    if not TELEGRAM_BOT_TOKEN:
         print("TELEGRAM_BOT_TOKEN environment variable required.")
         return
 
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+        app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     handler = MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message)
     app.add_handler(handler)
 
