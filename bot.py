@@ -19,8 +19,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-AIPIPE_TOKEN = os.getenv("AIPIPE_TOKEN")
-AIPIPE_BASE_URL = os.getenv("AIPIPE_BASE_URL", "https://aipipe.org/openrouter/v1")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 LOG_PUBLIC_URL = os.getenv("LOG_PUBLIC_URL", "none")
 LOCAL_LOG_PATH = os.getenv("LOCAL_LOG_PATH", "run.jsonl")
 PORT = int(os.getenv("PORT", "10000"))  # Render sets $PORT for web services
@@ -33,11 +33,11 @@ GIST_FILENAME = os.getenv("GIST_FILENAME", "run.jsonl")
 if not TELEGRAM_BOT_TOKEN:
     logger.error("TELEGRAM_BOT_TOKEN not set. Exiting.")
 
-if not AIPIPE_TOKEN:
-    logger.warning("AIPIPE_TOKEN not set. Model calls will fail if attempted.")
+if not GROQ_API_KEY:
+    logger.warning("GROQ_API_KEY not set. Model calls will fail if attempted.")
 
-# --- AI Pipe client (OpenAI-compatible proxy, free weekly budget) ---
-client = OpenAI(api_key=AIPIPE_TOKEN, base_url=AIPIPE_BASE_URL) if AIPIPE_TOKEN else None
+# --- Groq client (OpenAI-compatible, free developer tier) ---
+client = OpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL) if GROQ_API_KEY else None
 
 PROMPT_INSTRUCTIONS = (
     "You are a careful data-analyst agent. The user will send a plain-text message asking a data-analysis question. "
@@ -49,8 +49,8 @@ PROMPT_INSTRUCTIONS = (
 
 
 def call_openai(system_prompt: str, user_prompt: str, max_tokens: int = 1000):
-    """Calls a model via AI Pipe (OpenAI-compatible proxy), returns (model_name, text)."""
-    model_name = os.getenv("AIPIPE_MODEL", "google/gemini-2.0-flash-lite-001")
+    """Calls a model via Groq (OpenAI-compatible), returns (model_name, text)."""
+    model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
     resp = client.chat.completions.create(
         model=model_name,
         messages=[
@@ -81,7 +81,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     model_used = None
     try:
         if client is None:
-            raise RuntimeError("AIPIPE_TOKEN not configured")
+            raise RuntimeError("GROQ_API_KEY not configured")
         model_used, model_response_text = call_openai(system_prompt, user_prompt)
         logger.info("Model reply: %s", model_response_text)
     except Exception as e:
