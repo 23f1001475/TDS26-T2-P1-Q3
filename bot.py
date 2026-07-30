@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone
 
 import requests
-from google import genai
+from openai import OpenAI
 from flask import Flask
 try:
     from telegram import Update
@@ -19,7 +19,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+AIPIPE_TOKEN = os.getenv("AIPIPE_TOKEN")
+AIPIPE_BASE_URL = os.getenv("AIPIPE_BASE_URL", "https://aipipe.org/openrouter/v1")
 LOG_PUBLIC_URL = os.getenv("LOG_PUBLIC_URL", "none")
 LOCAL_LOG_PATH = os.getenv("LOCAL_LOG_PATH", "run.jsonl")
 PORT = int(os.getenv("PORT", "10000"))  # Render sets $PORT for web services
@@ -32,11 +33,11 @@ GIST_FILENAME = os.getenv("GIST_FILENAME", "run.jsonl")
 if not TELEGRAM_BOT_TOKEN:
     logger.error("TELEGRAM_BOT_TOKEN not set. Exiting.")
 
-if not GEMINI_API_KEY:
-    logger.warning("GEMINI_API_KEY not set. Gemini calls will fail if attempted.")
+if not AIPIPE_TOKEN:
+    logger.warning("AIPIPE_TOKEN not set. Model calls will fail if attempted.")
 
-# --- Gemini client ---
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+# --- AI Pipe client (OpenAI-compatible proxy, free weekly budget) ---
+client = OpenAI(api_key=AIPIPE_TOKEN, base_url=AIPIPE_BASE_URL) if AIPIPE_TOKEN else None
 
 PROMPT_INSTRUCTIONS = (
     "You are a careful data-analyst agent. The user will send a plain-text message asking a data-analysis question. "
@@ -48,18 +49,18 @@ PROMPT_INSTRUCTIONS = (
 
 
 def call_openai(system_prompt: str, user_prompt: str, max_tokens: int = 1000):
-    """Calls Gemini via google-genai SDK, returns (model_name, text). Name kept for minimal diff."""
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-    resp = client.models.generate_content(
+    """Calls a model via AI Pipe (OpenAI-compatible proxy), returns (model_name, text)."""
+    model_name = os.getenv("AIPIPE_MODEL", "google/gemini-2.0-flash-lite-001")
+    resp = client.chat.completions.create(
         model=model_name,
-        contents=user_prompt,
-        config={
-            "system_instruction": system_prompt,
-            "temperature": 0.0,
-            "max_output_tokens": max_tokens,
-        },
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.0,
+        max_tokens=max_tokens,
     )
-    text = resp.text.strip()
+    text = resp.choices[0].message.content.strip()
     return model_name, text
 
 
@@ -80,12 +81,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     model_used = None
     try:
         if client is None:
-            raise RuntimeError("GEMINI_API_KEY not configured")
+            raise RuntimeError("AIPIPE_TOKEN not configured")
         model_used, model_response_text = call_openai(system_prompt, user_prompt)
         logger.info("Model reply: %s", model_response_text)
     except Exception as e:
-        logger.exception("Gemini call failed: %s", e)
-        fallback = {"answer": {"error": "gemini_call_failed", "message": str(e)}, "log_url": LOG_PUBLIC_URL}
+        logger.exception("Model call failed: %s", e)
+        fallback = {"answer": {"error": "model_call_failed", "message": str(e)}, "log_url": LOG_PUBLIC_URL}
         model_response_text = json.dumps(fallback, ensure_ascii=False)
 
     # Ensure the model output is a single JSON object
