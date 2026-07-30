@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone
 
 import requests
-from openai import OpenAI
+from google import genai
 from flask import Flask
 try:
     from telegram import Update
@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 LOG_PUBLIC_URL = os.getenv("LOG_PUBLIC_URL", "none")
 LOCAL_LOG_PATH = os.getenv("LOCAL_LOG_PATH", "run.jsonl")
 PORT = int(os.getenv("PORT", "10000"))  # Render sets $PORT for web services
@@ -32,11 +32,11 @@ GIST_FILENAME = os.getenv("GIST_FILENAME", "run.jsonl")
 if not TELEGRAM_BOT_TOKEN:
     logger.error("TELEGRAM_BOT_TOKEN not set. Exiting.")
 
-if not OPENAI_API_KEY:
-    logger.warning("OPENAI_API_KEY not set. OpenAI calls will fail if attempted.")
+if not GEMINI_API_KEY:
+    logger.warning("GEMINI_API_KEY not set. Gemini calls will fail if attempted.")
 
-# --- openai>=1.0 client (FIX: old openai.api_key / openai.ChatCompletion no longer exist) ---
-client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+# --- Gemini client ---
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 PROMPT_INSTRUCTIONS = (
     "You are a careful data-analyst agent. The user will send a plain-text message asking a data-analysis question. "
@@ -48,19 +48,19 @@ PROMPT_INSTRUCTIONS = (
 
 
 def call_openai(system_prompt: str, user_prompt: str, max_tokens: int = 1000):
-    """Wraps the new openai>=1.0 client call, returns (model_name, text)."""
-    resp = client.chat.completions.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.0,
-        max_tokens=max_tokens,
+    """Calls Gemini via google-genai SDK, returns (model_name, text). Name kept for minimal diff."""
+    model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    resp = client.models.generate_content(
+        model=model_name,
+        contents=user_prompt,
+        config={
+            "system_instruction": system_prompt,
+            "temperature": 0.0,
+            "max_output_tokens": max_tokens,
+        },
     )
-    model_used = resp.model
-    text = resp.choices[0].message.content.strip()
-    return model_used, text
+    text = resp.text.strip()
+    return model_name, text
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -80,12 +80,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     model_used = None
     try:
         if client is None:
-            raise RuntimeError("OPENAI_API_KEY not configured")
+            raise RuntimeError("GEMINI_API_KEY not configured")
         model_used, model_response_text = call_openai(system_prompt, user_prompt)
         logger.info("Model reply: %s", model_response_text)
     except Exception as e:
-        logger.exception("OpenAI call failed: %s", e)
-        fallback = {"answer": {"error": "openai_call_failed", "message": str(e)}, "log_url": LOG_PUBLIC_URL}
+        logger.exception("Gemini call failed: %s", e)
+        fallback = {"answer": {"error": "gemini_call_failed", "message": str(e)}, "log_url": LOG_PUBLIC_URL}
         model_response_text = json.dumps(fallback, ensure_ascii=False)
 
     # Ensure the model output is a single JSON object
